@@ -27,14 +27,16 @@ function printHelp() {
     remarq help           Show this help
 
   Modes:
-    --dev        Default. Comments ignored, route committed.
-                 Team shares the setup, not the comments.
+    --dev        Default. Active in dev + staging only.
+                 Comments gitignored, route committed.
+                 Force on staging: NEXT_PUBLIC_REMARQ=true
 
-    --personal   Everything ignored. Your private feedback,
-                 nothing touches git.
+    --personal   Active in local dev only. Everything gitignored.
+                 Your private feedback, nothing in git.
 
-    --public       Comments committed to git. Shared with the
-                 whole team via version control.
+    --public     Active in ALL environments including production.
+                 Comments committed to git.
+                 Disable: NEXT_PUBLIC_REMARQ=false
   `);
 }
 
@@ -72,42 +74,36 @@ async function init() {
 
   // 5. Framework-specific setup
   if (framework === "nextjs") {
-    const isNew = await setupNextjs(cwd);
-    if (isNew) {
-      printSetupInstructions(mode);
-    } else {
+    const routeCreated = await setupNextjs(cwd);
+    const wrapperCreated = await createWrapper(cwd, mode);
+
+    if (!routeCreated && !wrapperCreated) {
       console.log("\n  remarq is already set up. Run your dev server and press C to comment.\n");
+    } else {
+      console.log(`
+  Done! Add one line to your root layout:
+
+  import { RemarqWrapper } from "@/components/remarq-wrapper";
+
+  export default function Layout({ children }) {
+    return (
+      <html>
+        <body>
+          <RemarqWrapper>{children}</RemarqWrapper>
+        </body>
+      </html>
+    );
+  }
+
+  Mode: ${mode}
+  Run your dev server and press C to comment.
+`);
     }
   } else {
     console.log("\n  Done! Add remarq to your app and run your dev server.\n");
   }
 }
 
-function printSetupInstructions(mode: Mode) {
-  console.log(`
-  Done! Add to your root layout:
-
-  import { RemarqProvider, CommentOverlay, CommentToggle, CommentSidebar } from "remarq";
-
-  export default function Layout({ children }) {
-    return (
-      <RemarqProvider pageId="my-page">
-        <div style={{ position: "relative" }}>
-          {children}
-          <CommentOverlay />
-          <CommentSidebar />
-          <CommentToggle />
-        </div>
-      </RemarqProvider>
-    );
-  }
-
-  Mode: ${mode}
-  ${mode === "dev" ? "Comments are local only. Route is committed." : ""}${mode === "personal" ? "Everything is gitignored. Your private feedback." : ""}${mode === "public" ? "Comments are committed to git. Comments shared via git." : ""}
-
-  Run your dev server and press C to comment.
-`);
-}
 
 // ── remarq remove ────────────────────────────────────────────
 
@@ -200,6 +196,64 @@ async function updateGitignore(cwd: string, mode: Mode) {
   }
 
   await fs.writeFile(gitignorePath, content, "utf-8");
+}
+
+async function createWrapper(cwd: string, mode: Mode): Promise<boolean> {
+  const dirs = [
+    path.join(cwd, "src", "components"),
+    path.join(cwd, "components"),
+  ];
+  let compDir: string | null = null;
+  for (const d of dirs) {
+    try { await fs.access(d); compDir = d; break; } catch {}
+  }
+  if (!compDir) {
+    compDir = path.join(cwd, "src", "components");
+    await fs.mkdir(compDir, { recursive: true });
+  }
+
+  const wrapperFile = path.join(compDir, "remarq-wrapper.tsx");
+  try {
+    await fs.access(wrapperFile);
+    return false;
+  } catch {
+    // Environment guard based on mode
+    const envGuard = mode === "public"
+      ? `// Public mode: remarq runs in all environments
+  const enabled = process.env.NEXT_PUBLIC_REMARQ !== "false";`
+      : mode === "personal"
+      ? `// Personal mode: only runs locally
+  const enabled = process.env.NODE_ENV === "development" && !process.env.CI;`
+      : `// Dev mode: runs in development and staging
+  const enabled = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_REMARQ === "true";`;
+
+    await fs.writeFile(wrapperFile, `"use client";
+
+import { RemarqProvider, CommentOverlay, CommentToggle, CommentSidebar } from "remarq";
+import { usePathname } from "next/navigation";
+
+export function RemarqWrapper({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  ${envGuard}
+
+  if (!enabled) return <>{children}</>;
+
+  return (
+    <RemarqProvider pageId={pathname}>
+      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        {children}
+        <CommentOverlay />
+        <CommentSidebar />
+        <CommentToggle />
+      </div>
+    </RemarqProvider>
+  );
+}
+`, "utf-8");
+    console.log("  ✓ Created components/remarq-wrapper.tsx");
+    return true;
+  }
 }
 
 async function setupNextjs(cwd: string): Promise<boolean> {
