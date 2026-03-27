@@ -23,12 +23,14 @@ npm install -g apostil
 **2. Initialize**
 
 ```bash
-npx apostil init           # or: pnpm exec apostil init
+npx apostil init             # personal (default) — local dev only
+npx apostil init --dev       # dev + staging environments
+npx apostil init --public    # all environments including production
 ```
 
 This will:
 - Create `app/api/apostil/route.ts` — API route for comment storage
-- Create `components/apostil-wrapper.tsx` — pre-configured wrapper component
+- Create `components/apostil-wrapper.tsx` — pre-configured wrapper with env guard
 - Create `.apostil/` directory and add it to `.gitignore`
 - **Automatically wrap `{children}` in your root layout** with `<ApostilWrapper>`
 
@@ -52,6 +54,16 @@ Comments are stored as JSON files in `.apostil/`:
 ```
 
 The wrapper auto-detects the current page from `usePathname()` and loads the corresponding comments. Every page in your app gets commenting automatically.
+
+## Modes
+
+| Mode | Active in | Comments in git | Env override |
+|------|-----------|----------------|--------------|
+| `(default)` | Local dev only | No | — |
+| `--dev` | Dev + staging | No | `NEXT_PUBLIC_APOSTIL=true` to force on |
+| `--public` | All environments | Yes | `NEXT_PUBLIC_APOSTIL=false` to disable |
+
+Re-run `npx apostil init --dev` (or `--public`) to switch modes — it will regenerate the wrapper component.
 
 ## Uninstall
 

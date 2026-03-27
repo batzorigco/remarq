@@ -3,11 +3,14 @@
 import fs from "fs/promises";
 import path from "path";
 
+type Mode = "personal" | "dev" | "public";
+
 const args = process.argv.slice(2);
 const command = args[0];
 
 if (command === "init") {
-  init();
+  const mode = parseMode(args.slice(1));
+  init(mode);
 } else if (command === "remove") {
   remove();
 } else if (command === "help" || command === "--help" || command === "-h" || !command) {
@@ -17,18 +20,29 @@ if (command === "init") {
   printHelp();
 }
 
+function parseMode(flags: string[]): Mode {
+  if (flags.includes("--dev")) return "dev";
+  if (flags.includes("--public")) return "public";
+  return "personal";
+}
+
 function printHelp() {
   console.log(`
   apostil — Pin-and-comment feedback for React & Next.js
 
   Usage:
-    npx apostil init      Set up apostil in your Next.js project
-    npx apostil remove    Remove apostil from your project
-    npx apostil help      Show this help
+    npx apostil init [mode]   Set up apostil in your Next.js project
+    npx apostil remove        Remove apostil from your project
+    npx apostil help          Show this help
+
+  Modes:
+    (default)    Personal — local dev only, comments gitignored
+    --dev        Dev + staging — comments gitignored, env-controlled
+    --public     All environments — comments committed to git
 `);
 }
 
-async function init() {
+async function init(mode: Mode) {
   const cwd = process.cwd();
 
   // Detect Next.js app directory
@@ -42,7 +56,8 @@ async function init() {
   // Detect src/ prefix
   const useSrc = appDir.includes("src/app");
 
-  console.log("\n  Setting up apostil...\n");
+  const modeLabel = mode === "personal" ? "personal" : mode === "dev" ? "dev" : "public";
+  console.log(`\n  Setting up apostil (${modeLabel} mode)...\n`);
 
   // 1. Create API route
   const apiDir = path.join(appDir, "api", "apostil");
@@ -56,44 +71,50 @@ async function init() {
       `export { GET, POST } from "apostil/adapters/nextjs";\n`,
       "utf-8"
     );
-    console.log("  ✓ Created ${rel(cwd, apiFile)}");
+    console.log(`  ✓ Created ${rel(cwd, apiFile)}`);
   }
 
   // 2. Create wrapper component
   const componentsDir = path.join(cwd, useSrc ? "src/components" : "components");
   const wrapperFile = path.join(componentsDir, "apostil-wrapper.tsx");
-  if (await fileExists(wrapperFile)) {
-    console.log("  ✓ Wrapper component already exists");
-  } else {
-    await fs.mkdir(componentsDir, { recursive: true });
-    await fs.writeFile(wrapperFile, getWrapperComponent(), "utf-8");
-    console.log(`  ✓ Created ${rel(cwd, wrapperFile)}`);
-  }
+  await fs.mkdir(componentsDir, { recursive: true });
+  await fs.writeFile(wrapperFile, getWrapperComponent(mode), "utf-8");
+  console.log(`  ✓ Created ${rel(cwd, wrapperFile)} (${modeLabel} mode)`);
 
   // 3. Create .apostil/ directory for comment storage
   const commentsDir = path.join(cwd, ".apostil");
   await fs.mkdir(commentsDir, { recursive: true });
   console.log("  ✓ Created .apostil/ directory");
 
-  // 4. Add .apostil/ to .gitignore
+  // 4. Handle .gitignore based on mode
   const gitignorePath = path.join(cwd, ".gitignore");
   let gitignore = "";
   try {
     gitignore = await fs.readFile(gitignorePath, "utf-8");
   } catch {}
 
-  if (!gitignore.includes(".apostil")) {
-    const entry = "\n# Apostil comments\n.apostil/\n";
-    await fs.appendFile(gitignorePath, entry, "utf-8");
-    console.log("  ✓ Added .apostil/ to .gitignore");
+  if (mode === "public") {
+    // Public mode: don't gitignore comments — they get committed
+    if (gitignore.includes(".apostil")) {
+      console.log("  ✓ .gitignore unchanged (public mode — comments will be committed)");
+    } else {
+      console.log("  ✓ Comments will be committed to git (public mode)");
+    }
   } else {
-    console.log("  ✓ .gitignore already configured");
+    // Personal & dev: gitignore comments
+    if (!gitignore.includes(".apostil")) {
+      const entry = "\n# Apostil comments\n.apostil/\n";
+      await fs.appendFile(gitignorePath, entry, "utf-8");
+      console.log("  ✓ Added .apostil/ to .gitignore");
+    } else {
+      console.log("  ✓ .gitignore already configured");
+    }
   }
 
   // 5. Inject wrapper into root layout
   const layoutInjected = await injectIntoLayout(appDir, useSrc);
   if (layoutInjected) {
-    console.log(`  ✓ Added <ApostilWrapper> to root layout`);
+    console.log("  ✓ Added <ApostilWrapper> to root layout");
   }
 
   console.log("\n  Done! Run your dev server and press C to start commenting.\n");
@@ -154,7 +175,31 @@ async function remove() {
 
 // --- Wrapper component template ---
 
-function getWrapperComponent(): string {
+function getWrapperComponent(mode: Mode): string {
+  const envGuard = mode === "personal"
+    ? `
+  // Personal mode — only active in local development
+  if (process.env.NODE_ENV !== "development") {
+    return <>{children}</>;
+  }
+`
+    : mode === "dev"
+    ? `
+  // Dev mode — active in dev + staging, disabled in production
+  // Set NEXT_PUBLIC_APOSTIL=true to force on in any environment
+  const forceOn = process.env.NEXT_PUBLIC_APOSTIL === "true";
+  if (process.env.NODE_ENV === "production" && !forceOn) {
+    return <>{children}</>;
+  }
+`
+    : `
+  // Public mode — active in all environments
+  // Set NEXT_PUBLIC_APOSTIL=false to disable
+  if (process.env.NEXT_PUBLIC_APOSTIL === "false") {
+    return <>{children}</>;
+  }
+`;
+
   return `"use client";
 
 import { usePathname } from "next/navigation";
@@ -165,7 +210,7 @@ import {
   CommentSidebar,
 } from "apostil";
 
-export function ApostilWrapper({ children }: { children: React.ReactNode }) {
+export function ApostilWrapper({ children }: { children: React.ReactNode }) {${envGuard}
   const pathname = usePathname();
   const pageId = pathname.replace(/\\//g, "--").replace(/^--/, "") || "home";
 
@@ -222,7 +267,6 @@ async function injectIntoLayout(appDir: string, useSrc: boolean): Promise<boolea
   const bodyMatch = content.match(bodyChildrenRegex);
 
   if (bodyMatch) {
-    // Wrap {children} inside <body> with <ApostilWrapper>
     content = content.replace(
       bodyChildrenRegex,
       `$1$2<ApostilWrapper>$3</ApostilWrapper>$4$5`
