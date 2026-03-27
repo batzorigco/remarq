@@ -1,27 +1,26 @@
 # Apostil
 
-Pin-and-comment feedback overlay for React & Next.js. Let your team leave contextual feedback directly on the UI.
+Figma-like commenting tool for React & Next.js. Leave comments directly on the Web App UI, and never miss a feedback.
 
-## Features
+## What can it do?
 
-- **Click to pin** — drop comment pins anywhere on the page
 - **Smart target detection** — auto-anchors to nearest meaningful element
-- **Thread-based** — replies, resolve/unresolve, delete
-- **Keyboard shortcuts** — `C` to toggle comment mode, `Esc` to cancel
-- **Popover-aware** — comments inside modals/popovers re-appear when reopened
-- **All Pages view** — see every comment across your project in one sidebar
-- **Auto z-index** — overlay detects highest z-index and sits above everything
+- **Project level view** — see every comment across your project in one sidebar, like Figma.
 - **SSR-safe** — works with Next.js App Router
 
-## Quick Start
+## Quick Start Guide
 
-### 1. Install
+**1. Install** with npm, pnpm, or yarn
 
 ```bash
-npm install apostil        # or: pnpm add apostil / yarn add apostil
+npm install apostil
+```
+Or install globally 
+```bash
+npm install -g apostil        
 ```
 
-### 2. Initialize
+**2. Initialize**
 
 ```bash
 npx apostil init           # or: pnpm exec apostil init
@@ -33,7 +32,7 @@ This will:
 - Create `.apostil/` directory and add it to `.gitignore`
 - **Automatically wrap `{children}` in your root layout** with `<ApostilWrapper>`
 
-### 3. Done
+**3. Start your project and start commenting**
 
 ```bash
 npm run dev
