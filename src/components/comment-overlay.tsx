@@ -15,6 +15,23 @@ type PendingPin = {
   targetLabel?: string;
 };
 
+// Find the highest z-index on the page (cached per toggle)
+let cachedHighZ = 0;
+let cacheTimestamp = 0;
+function getHighestZIndex(): number {
+  const now = Date.now();
+  if (now - cacheTimestamp < 500) return cachedHighZ; // cache for 500ms
+  let max = 0;
+  const els = document.querySelectorAll("[style*='z-index'], [class*='z-']");
+  for (let i = 0; i < els.length; i++) {
+    const z = parseInt(getComputedStyle(els[i]).zIndex, 10);
+    if (!isNaN(z) && z > max) max = z;
+  }
+  cachedHighZ = Math.max(max, 100); // minimum 100
+  cacheTimestamp = now;
+  return cachedHighZ;
+}
+
 // Semantic elements that are meaningful containers
 const SEMANTIC_TAGS = new Set([
   "SECTION", "NAV", "ASIDE", "HEADER", "FOOTER", "MAIN",
@@ -337,11 +354,12 @@ export function CommentOverlay() {
       {/* Overlay layer */}
       <div
         ref={overlayRef}
-        className={`absolute inset-0 z-[55] ${
+        className={`fixed inset-0 ${
           commentMode
             ? "cursor-crosshair pointer-events-auto"
             : "pointer-events-none"
         }`}
+        style={{ zIndex: commentMode ? getHighestZIndex() + 10 : 55 }}
         onClick={handleClick}
       >
         {/* Existing pins */}
