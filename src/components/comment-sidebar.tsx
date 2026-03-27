@@ -1,7 +1,9 @@
 "use client";
 
-import { X, Check, Undo2, MessageSquare } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Check, Undo2, MessageSquare, Globe, FileText } from "lucide-react";
 import { useRemarq } from "../context";
+import type { RemarqThread } from "../types";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -14,6 +16,12 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
+function pageIdToDisplay(pageId: string): string {
+  return pageId.replace(/--/g, "/").replace(/-/g, ".");
+}
+
+type AllPagesData = { pageId: string; threads: RemarqThread[] }[];
+
 export function CommentSidebar() {
   const {
     threads,
@@ -22,6 +30,39 @@ export function CommentSidebar() {
     setActiveThreadId,
     resolveThread,
   } = useRemarq();
+
+  const [tab, setTab] = useState<"page" | "all">("page");
+  const [allPages, setAllPages] = useState<AllPagesData>([]);
+  const [loadingAll, setLoadingAll] = useState(false);
+
+  // Fetch all pages when "All Pages" tab is selected
+  useEffect(() => {
+    if (!sidebarOpen || tab !== "all") return;
+    setLoadingAll(true);
+
+    // Try CLI server first, then local API
+    async function fetchAll() {
+      // Try multiple possible endpoints
+      const urls = [
+        "http://localhost:4567/api/all-comments",
+        "/api/all-comments",
+      ];
+      for (const url of urls) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            setAllPages(data);
+            setLoadingAll(false);
+            return;
+          }
+        } catch {}
+      }
+      setAllPages([]);
+      setLoadingAll(false);
+    }
+    fetchAll();
+  }, [sidebarOpen, tab]);
 
   if (!sidebarOpen) return null;
 
@@ -37,11 +78,6 @@ export function CommentSidebar() {
           <span className="text-sm font-semibold text-neutral-900">
             Comments
           </span>
-          {openThreads.length > 0 && (
-            <span className="text-xs bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-full">
-              {openThreads.length}
-            </span>
-          )}
         </div>
         <button
           onClick={() => setSidebarOpen(false)}
@@ -51,54 +87,233 @@ export function CommentSidebar() {
         </button>
       </div>
 
-      {/* Thread list */}
+      {/* Tabs */}
+      <div className="flex border-b border-neutral-100">
+        <button
+          onClick={() => setTab("page")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+            tab === "page"
+              ? "text-neutral-900 border-b-2 border-neutral-900"
+              : "text-neutral-400 hover:text-neutral-600"
+          }`}
+        >
+          <FileText className="w-3 h-3" />
+          This Page
+          {openThreads.length > 0 && (
+            <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-px rounded-full">
+              {openThreads.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab("all")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+            tab === "all"
+              ? "text-neutral-900 border-b-2 border-neutral-900"
+              : "text-neutral-400 hover:text-neutral-600"
+          }`}
+        >
+          <Globe className="w-3 h-3" />
+          All Pages
+        </button>
+      </div>
+
+      {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {threads.length === 0 && (
-          <div className="p-6 text-center text-sm text-neutral-400">
-            No comments yet.
-          </div>
-        )}
-
-        {openThreads.length > 0 && (
-          <div>
-            <div className="px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
-              Open ({openThreads.length})
-            </div>
-            {openThreads.map((thread) => (
-              <ThreadItem
-                key={thread.id}
-                thread={thread}
-                onSelect={() => {
-                  setActiveThreadId(thread.id);
-                }}
-                onResolve={() => resolveThread(thread.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {resolvedThreads.length > 0 && (
-          <div>
-            <div className="px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
-              Resolved ({resolvedThreads.length})
-            </div>
-            {resolvedThreads.map((thread) => (
-              <ThreadItem
-                key={thread.id}
-                thread={thread}
-                onSelect={() => {
-                  setActiveThreadId(thread.id);
-                }}
-                onResolve={() => resolveThread(thread.id)}
-                resolved
-              />
-            ))}
-          </div>
+        {tab === "page" ? (
+          <PageThreads
+            threads={threads}
+            openThreads={openThreads}
+            resolvedThreads={resolvedThreads}
+            onSelect={setActiveThreadId}
+            onResolve={resolveThread}
+          />
+        ) : (
+          <AllPagesView
+            pages={allPages}
+            loading={loadingAll}
+          />
         )}
       </div>
     </div>
   );
 }
+
+// --- This Page tab ---
+
+function PageThreads({
+  threads,
+  openThreads,
+  resolvedThreads,
+  onSelect,
+  onResolve,
+}: {
+  threads: RemarqThread[];
+  openThreads: RemarqThread[];
+  resolvedThreads: RemarqThread[];
+  onSelect: (id: string) => void;
+  onResolve: (id: string) => void;
+}) {
+  if (threads.length === 0) {
+    return (
+      <div className="p-6 text-center text-sm text-neutral-400">
+        No comments on this page.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {openThreads.length > 0 && (
+        <div>
+          <div className="px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+            Open ({openThreads.length})
+          </div>
+          {openThreads.map((thread) => (
+            <ThreadItem
+              key={thread.id}
+              thread={thread}
+              onSelect={() => onSelect(thread.id)}
+              onResolve={() => onResolve(thread.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {resolvedThreads.length > 0 && (
+        <div>
+          <div className="px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+            Resolved ({resolvedThreads.length})
+          </div>
+          {resolvedThreads.map((thread) => (
+            <ThreadItem
+              key={thread.id}
+              thread={thread}
+              onSelect={() => onSelect(thread.id)}
+              onResolve={() => onResolve(thread.id)}
+              resolved
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// --- All Pages tab ---
+
+function AllPagesView({
+  pages,
+  loading,
+}: {
+  pages: AllPagesData;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="p-6 text-center text-sm text-neutral-400">
+        Loading...
+      </div>
+    );
+  }
+
+  if (pages.length === 0) {
+    return (
+      <div className="p-6 text-center text-sm text-neutral-400">
+        No comments in this project yet.
+      </div>
+    );
+  }
+
+  const totalOpen = pages.reduce((s, p) => s + p.threads.filter((t) => !t.resolved).length, 0);
+
+  return (
+    <>
+      {totalOpen > 0 && (
+        <div className="px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+          {totalOpen} open across {pages.length} pages
+        </div>
+      )}
+
+      {pages.map((page) => {
+        const open = page.threads.filter((t) => !t.resolved);
+        const resolved = page.threads.filter((t) => t.resolved);
+        const displayName = pageIdToDisplay(page.pageId);
+
+        return (
+          <div key={page.pageId} className="border-b border-neutral-50">
+            {/* Page header */}
+            <div className="px-4 py-2.5 flex items-center justify-between bg-neutral-50/50">
+              <span className="text-xs font-semibold text-neutral-700 truncate">
+                {displayName}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {open.length > 0 && (
+                  <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-px rounded-full font-medium">
+                    {open.length}
+                  </span>
+                )}
+                {resolved.length > 0 && (
+                  <span className="text-[10px] bg-neutral-100 text-neutral-500 px-1.5 py-px rounded-full font-medium">
+                    {resolved.length}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Threads for this page */}
+            {[...open, ...resolved].map((thread) => {
+              const firstComment = thread.comments[0];
+              if (!firstComment) return null;
+              const isResolved = thread.resolved;
+
+              return (
+                <div
+                  key={thread.id}
+                  onClick={() => {
+                    // Navigate to the page with the comment hash
+                    const path = "/" + page.pageId.replace(/--/g, "/");
+                    window.location.href = path + "#remarq-" + thread.id;
+                  }}
+                  className={`px-4 py-2.5 border-b border-neutral-50 cursor-pointer hover:bg-neutral-50 transition-colors ${
+                    isResolved ? "opacity-50" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-semibold"
+                        style={{ backgroundColor: firstComment.author.color }}
+                      >
+                        {firstComment.author.name[0]?.toUpperCase()}
+                      </div>
+                      <span className="text-xs font-medium text-neutral-700">
+                        {firstComment.author.name}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-neutral-400">
+                      {timeAgo(firstComment.createdAt)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-600 line-clamp-2 pl-6">
+                    {firstComment.body}
+                  </p>
+                  {thread.comments.length > 1 && (
+                    <span className="text-[10px] text-neutral-400 pl-6">
+                      {thread.comments.length - 1} {thread.comments.length - 1 === 1 ? "reply" : "replies"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// --- Shared thread item ---
 
 function ThreadItem({
   thread,

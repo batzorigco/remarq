@@ -5,7 +5,6 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { getInjectorScript } from "./injector";
-import { getDashboardHTML } from "./dashboard";
 
 const DEFAULT_PORT = 4567;
 const REMARQ_DIR = path.join(os.homedir(), ".remarq");
@@ -136,14 +135,6 @@ async function startServer() {
       return;
     }
 
-    // Dashboard
-    if (url.pathname === "/" || url.pathname === "/dashboard") {
-      res.setHeader("Content-Type", "text/html");
-      res.writeHead(200);
-      res.end(getDashboardHTML(port, project));
-      return;
-    }
-
     // API: list all comments across all pages
     if (req.method === "GET" && url.pathname === "/api/all-comments") {
       try {
@@ -198,9 +189,6 @@ async function startServer() {
   ║  Server:  http://localhost:${String(port).padEnd(15)}║
   ║  Project: ${project.padEnd(30)}║
   ║  Storage: ~/.remarq/${project.padEnd(20)}║
-  ║                                          ║
-  ║  Dashboard:                                ║
-  ║  http://localhost:${String(port).padEnd(26)}║
   ║                                          ║
   ║  Add to your app:                        ║
   ║  <script src="http://localhost:${port}/   ║
