@@ -1,0 +1,70 @@
+{
+  "name": "remarq",
+  "version": "0.1.0",
+  "description": "Pin-and-comment feedback overlay for design prototypes and web apps",
+  "license": "MIT",
+  "author": "Batzorigco",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/batzorigco/remarq.git"
+  },
+  "keywords": [
+    "comments",
+    "feedback",
+    "annotation",
+    "prototype",
+    "design",
+    "overlay",
+    "review",
+    "collaboration"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./adapters/localStorage": {
+      "types": "./dist/adapters/localStorage.d.ts",
+      "import": "./dist/adapters/localStorage.js"
+    },
+    "./adapters/rest": {
+      "types": "./dist/adapters/rest.d.ts",
+      "import": "./dist/adapters/rest.js"
+    },
+    "./adapters/nextjs": {
+      "types": "./dist/adapters/nextjs.d.ts",
+      "import": "./dist/adapters/nextjs.js"
+    },
+    "./adapters/global": {
+      "types": "./dist/adapters/global.d.ts",
+      "import": "./dist/adapters/global.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "lucide-react": ">=0.300.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "^19",
+    "react-dom": "^19",
+    "tsup": "^8",
+    "typescript": "^5"
+  }
+}
