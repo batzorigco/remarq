@@ -1,10 +1,10 @@
 /**
  * Next.js API route handler for remarq comment storage.
- * Stores comments as JSON files on the server filesystem.
+ * Stores comments as JSON files in the project's .remarq/ directory.
  *
- * Usage in your Next.js app:
+ * Usage:
  *
- * // app/api/comments/route.ts
+ * // app/api/remarq/route.ts
  * export { GET, POST } from "remarq/adapters/nextjs";
  *
  * Or with custom directory:
@@ -13,8 +13,7 @@
  * export { GET, POST };
  */
 
-export function createNextjsHandler(directory: string = ".comments") {
-  // Dynamic import to avoid bundling node modules in client
+export function createNextjsHandler(directory: string = ".remarq") {
   return {
     async GET(request: Request) {
       const { promises: fs } = await import("fs");
@@ -22,14 +21,38 @@ export function createNextjsHandler(directory: string = ".comments") {
 
       const url = new URL(request.url);
       const pageId = url.searchParams.get("pageId");
+      const dir = path.join(process.cwd(), directory);
+
+      // If no pageId, return ALL comments across all pages
       if (!pageId) {
-        return Response.json({ error: "Missing pageId" }, { status: 400 });
+        try {
+          const files = await fs.readdir(dir);
+          const pages: { pageId: string; threads: unknown[] }[] = [];
+          for (const file of files) {
+            if (!file.endsWith(".json")) continue;
+            const id = file.replace(".json", "");
+            try {
+              const data = await fs.readFile(path.join(dir, file), "utf-8");
+              const threads = JSON.parse(data);
+              if (Array.isArray(threads) && threads.length > 0) {
+                pages.push({ pageId: id, threads });
+              }
+            } catch {}
+          }
+          pages.sort((a, b) => {
+            const aLatest = Math.max(...(a.threads as Array<{ createdAt: string }>).map((t) => new Date(t.createdAt).getTime()));
+            const bLatest = Math.max(...(b.threads as Array<{ createdAt: string }>).map((t) => new Date(t.createdAt).getTime()));
+            return bLatest - aLatest;
+          });
+          return Response.json(pages);
+        } catch {
+          return Response.json([]);
+        }
       }
 
-      const dir = path.join(process.cwd(), directory);
+      // Single page
       const safeName = pageId.replace(/[^a-zA-Z0-9_-]/g, "");
       const file = path.join(dir, `${safeName}.json`);
-
       try {
         const data = await fs.readFile(file, "utf-8");
         return Response.json(JSON.parse(data));
@@ -64,7 +87,7 @@ export function createNextjsHandler(directory: string = ".comments") {
   };
 }
 
-// Default handler with ".comments" directory
+// Default handler with ".remarq" directory
 const defaultHandler = createNextjsHandler();
 export const GET = defaultHandler.GET;
 export const POST = defaultHandler.POST;

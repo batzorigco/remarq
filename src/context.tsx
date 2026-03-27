@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { RemarqThread, RemarqUser, RemarqStorage } from "./types";
-import { localStorageAdapter } from "./adapters/localStorage";
+import { createRestAdapter } from "./adapters/rest";
 import { generateId, loadUser, saveUser, getRandomColor } from "./utils";
 
 type RemarqContextValue = {
@@ -40,7 +40,8 @@ export function RemarqProvider({
   storage?: RemarqStorage;
   children: ReactNode;
 }) {
-  const adapter = storage ?? localStorageAdapter;
+  // Default: use the app's own /api/remarq route
+  const adapter = storage ?? createRestAdapter("/api/remarq");
   const [threads, setThreads] = useState<RemarqThread[]>([]);
   const [user, setUserState] = useState<RemarqUser | null>(null);
   const [commentMode, setCommentMode] = useState(false);

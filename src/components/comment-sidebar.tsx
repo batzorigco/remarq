@@ -42,23 +42,14 @@ export function CommentSidebar() {
 
     // Try CLI server first, then local API
     async function fetchAll() {
-      // Try multiple possible endpoints
-      const urls = [
-        "http://localhost:4567/api/all-comments",
-        "/api/all-comments",
-      ];
-      for (const url of urls) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            setAllPages(data);
-            setLoadingAll(false);
-            return;
-          }
-        } catch {}
-      }
-      setAllPages([]);
+      // Fetch from the app's own API route (no pageId = returns all pages)
+      try {
+        const res = await fetch("/api/remarq");
+        if (res.ok) {
+          const data = await res.json();
+          setAllPages(data);
+        }
+      } catch {}
       setLoadingAll(false);
     }
     fetchAll();
