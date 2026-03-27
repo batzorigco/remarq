@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import type { RemarqThread, RemarqUser, RemarqStorage } from "./types";
@@ -55,17 +56,26 @@ export function RemarqProvider({
     if (saved) setUserState(saved);
   }, []);
 
+  // Track current pageId to avoid saving stale data during transitions
+  const pageIdRef = useRef(pageId);
+
   useEffect(() => {
+    pageIdRef.current = pageId;
+    setLoaded(false);
     debug.log("loading threads for pageId:", pageId);
     adapter.load(pageId).then((t) => {
-      debug.log("loaded", t.length, "threads");
-      setThreads(t);
-      setLoaded(true);
+      // Only apply if pageId hasn't changed during the fetch
+      if (pageIdRef.current === pageId) {
+        debug.log("loaded", t.length, "threads for", pageId);
+        setThreads(t);
+        setLoaded(true);
+      }
     });
   }, [pageId, adapter]);
 
   useEffect(() => {
-    if (loaded) {
+    // Only save if loaded AND pageId matches (avoid saving during transitions)
+    if (loaded && pageIdRef.current === pageId) {
       debug.log("saving", threads.length, "threads for pageId:", pageId);
       adapter.save(pageId, threads);
     }
