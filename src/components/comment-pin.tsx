@@ -136,24 +136,26 @@ function TargetedPin({
 
   useEffect(() => {
     if (!thread.targetId) return;
-    const el = findTargetElement(thread.targetId);
-    if (el) {
-      // Ensure the target has relative positioning so our absolute pin works
-      const pos = getComputedStyle(el).position;
-      if (pos === "static") {
-        el.style.position = "relative";
+
+    function tryFind() {
+      const el = findTargetElement(thread.targetId!);
+      if (el) {
+        const pos = getComputedStyle(el).position;
+        if (pos === "static") el.style.position = "relative";
+        setTargetEl(el);
+      } else {
+        setTargetEl(null);
       }
-      setTargetEl(el);
-      console.log("[comments:pin] portaling into target:", {
-        threadId: thread.id.slice(0, 8),
-        targetId: thread.targetId,
-        element: el.tagName.toLowerCase() + (el.className ? `.${el.className.toString().split(" ")[0]}` : ""),
-      });
-    } else {
-      console.warn("[comments:pin] ❌ target not found for portal:", thread.targetId);
-      setTargetEl(null);
     }
-  }, [thread.targetId, thread.id]);
+
+    tryFind();
+
+    // Watch for DOM changes — target element may appear/disappear (popovers, dialogs)
+    const observer = new MutationObserver(() => tryFind());
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [thread.targetId]);
 
   if (!targetEl) return null;
 
